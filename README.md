@@ -58,7 +58,7 @@ This service as well would store the sent messages basically in plain text (unti
 
 If you care about keeping your information secure, you should either use a trusted [end-to-end encrypted](https://en.wikipedia.org/wiki/End-to-end_encryption) messenger or utilize [public-key cryptography](https://en.wikipedia.org/wiki/Email_encryption) yourself.
 
-**If you don't use end-to-end encryption, your conversations can be accessed by other people.**
+*If the messenger you are using does not utilize end-to-end encryption, it means your messages can be read by other people.*
 
 ### What if the service gets hacked?
 
