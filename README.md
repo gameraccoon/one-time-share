@@ -18,7 +18,7 @@ If Dave's computer gets hacked the next day, the person who gains access won't b
 - The message will not be accessible after the set time and will be removed from the server soon after it expires.
 - TLS encryption ensures that the message cannot be intercepted on the way to the server or from the server to the recipient.
 
-### What this service does not guarantee
+### What does this service not guarantee?
 
 This service does not guarantee that a malicious user cannot access the message. If your messenger is vulnerable to a "man-in-the-middle" attack, or if you or your recipient have spyware on your machines, this service won't prevent information leaks.
 
@@ -36,11 +36,13 @@ And, as with most services today, this service cannot guarantee that it will nev
 - The size of the message is restricted.
 - Maximum possible message storage time is 30 days (on your own server, you can disable all these limits).
 
-### What information is stored on the server
+### What information is stored on the server?
 
 - Message (basically in plain text)
 - The expiry time of the message
 - The token associated with the message
+
+No cookies, no IPs, no other means of tracking.
 
 ### Can I set up my own server?
 
@@ -74,7 +76,7 @@ Good:
 
 This makes a difference if our server gets hacked. In the first case, the hacker would get everything they need to access the account. In the second case, they would get just a set of symbols without any idea where it can be applied.
 
-## Your own server set up
+## Setting up your own server
 
 1. Clone the repository
 2. Edit `app-config.json` to set paths to your TLS certificate and key, or set `forceUnprotectedHttp` to `true` in case you enable HTTPS through a reverse proxy like nginx
@@ -84,7 +86,7 @@ This makes a difference if our server gets hacked. In the first case, the hacker
 
 Refer to [build.yaml](https://github.com/gameraccoon/one-time-share/blob/main/.github/workflows/build.yml) for insights on how to build the project.
 
-### Things to think about when setting up your own server
+### Things to consider when setting up your own server
 - Make sure your server runs under HTTPS and is not accessible via HTTP
   - Using HTTP is as good as broadcasting your private data to everyone in your network
 - Whether you plan to deploy this web service or develop your own for your business, this service can be an easy point of entry for hackers to access other systems. You should ensure that no important information (such as access tokens or permanent passwords) is shared and the service is secured no less than other sensitive parts of your network.
