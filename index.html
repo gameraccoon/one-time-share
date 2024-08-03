@@ -50,6 +50,11 @@ function updateLimitText() {
     }
 }
 
+function onTextChanged() {
+    $('#generate').prop('disabled', false);
+    updateLimitText();
+}
+
 function updatePasswordVisibility() {
     if ($('#password').is(':checked')) {
         $('#passwordField').show();
@@ -119,6 +124,7 @@ $(document).ready(function() {
         $.post('/save', { user_token: userToken, message_data: message, retention: $('#retention').val()}).done(function(data) {
             $('#url').val(data)
             $('#url-div').show();
+            $('#generate').prop('disabled', true);
         })
         .fail(function(error) {
             alert('Failed to generate URL: ' + error.responseText);
@@ -130,7 +136,7 @@ $(document).ready(function() {
         document.execCommand('copy');
     });
 
-    $('#message').on('input', updateLimitText);
+    $('#message').on('input', onTextChanged);
 
     $('#password').change(updatePasswordVisibility);
 
