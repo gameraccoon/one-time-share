@@ -422,6 +422,7 @@ func main() {
 
 func calculateStoredMessageLimit(plainTextSize int) int {
 	// we have 16 bytes of overhead for AES-GCM, 12 bytes for IV
-	// the data is base64 encoded, so we need to multiply by 4/3
-	return (16+12+plainTextSize)*4/3 + 2
+	// the message can be encrypted twice, so double the overhead
+	// the data is base64 encoded, so we need to multiply by 4/3 and round up
+	return ((16+12)*2+plainTextSize)*4/3 + 4
 }

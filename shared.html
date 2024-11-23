@@ -24,37 +24,98 @@ textarea {
 <script>
 const messageToken = "{{.MessageToken}}";
 
-function decryptMessage(encryptedMessage, key) {
-    var encryptedData = new Uint8Array(atob(encryptedMessage).split('').map(function(c) {
+function recoverKeyFromText(keyText) {
+    return window.crypto.subtle.importKey("raw", new Uint8Array(atob(keyText).split('').map(function(c) {
         return c.charCodeAt(0);
-    }));
+    }), "AES-GCM"), {name: "AES-GCM"}, false, ["decrypt"]);
+}
 
+function generateKeyFromPassword(password, salt) {
+    var encoder = new TextEncoder('utf-8');
+    var passwordData = encoder.encode(password);
+
+    return window.crypto.subtle.importKey("raw", passwordData, "PBKDF2", false, ["deriveKey"]).then(function(passwordKey) {
+        return window.crypto.subtle.deriveKey(
+            {
+                name: "PBKDF2",
+                salt: salt,
+                iterations: 600000,
+                hash: "SHA-256"
+            },
+            passwordKey,
+            { name: "AES-GCM", length: 128 },
+            false,
+            ["decrypt"]
+        );
+    });
+}
+
+function decryptBytes(encryptedBytes, key) {
     var ivLength = 12;
-    var iv = encryptedData.slice(0, ivLength);
+    var iv = encryptedBytes.slice(0, ivLength);
     var aesAlgorithm = {
         name: "AES-GCM",
         iv: iv,
     };
 
-    encryptedData = encryptedData.slice(ivLength);
+    encryptedBytes = encryptedBytes.slice(ivLength);
 
-    return window.crypto.subtle.importKey("raw", new Uint8Array(atob(key).split('').map(function(c) {
+    return window.crypto.subtle.decrypt(aesAlgorithm, key, encryptedBytes);
+}
+
+function decryptMessage(encryptedMessage, keyText) {
+    var encryptedBytes = new Uint8Array(atob(encryptedMessage).split('').map(function(c) {
         return c.charCodeAt(0);
-    }), "AES-GCM"), {name: "AES-GCM"}, false, ["decrypt"]).then(function(importedKey) {
-        return window.crypto.subtle.decrypt(aesAlgorithm, importedKey, encryptedData).then(function(decryptedData) {
+    }));
+
+    return recoverKeyFromText(keyText).then(function(importedKey) {
+        return decryptBytes(encryptedBytes, importedKey).then(function(decryptedData) {
             return new TextDecoder('utf-8').decode(decryptedData);
         });
     }).catch(function(error) {
-        onGenericEncryptionFailed(error, encryptedMessage);
+        onGenericEncryptionFailed(encryptedMessage);
         alert('Failed to decrypt message, check the encryption key');
         return "error";
     });
 }
 
-function onGenericEncryptionFailed(error, encryptedMessage) {
+function decryptMessageWithPassword(encryptedMessage, keyText, password) {
+    var encryptedBytes = new Uint8Array(atob(encryptedMessage).split('').map(function(c) {
+        return c.charCodeAt(0);
+    }));
+
+    return recoverKeyFromText(keyText).then(function(importedKey) {
+        return decryptBytes(encryptedBytes, importedKey).then(async function(onceDecryptedBytes) {
+            var salt = new Uint8Array(atob(keyText).split('').map(function(c) {
+                return c.charCodeAt(0);
+            }));
+            return generateKeyFromPassword(password, salt).then(function(passwordKey) {
+                return decryptBytes(onceDecryptedBytes, passwordKey).then(function(decryptedData) {
+                    return new TextDecoder('utf-8').decode(decryptedData);
+                });
+            }).catch(function(error) {
+                onPasswordEncryptionFailed();
+                alert('Failed to decrypt message, check the password');
+                return "error";
+            });
+        });
+    }).catch(function(error) {
+        onPasswordEncryptionFailed();
+        alert('Failed to decrypt message, check that the encryption key is provided (the part after # in the original URL)');
+        return "error";
+    });
+}
+
+function onGenericEncryptionFailed(encryptedMessage) {
     $('#retrieved').hide();
     $('#manually-decrypt-after-error').show();
     $('#encryptedMessage').val(encryptedMessage);
+}
+
+function onPasswordEncryptionFailed() {
+    $('#retrieved').hide();
+    $('#manually-password-decrypt').show();
+    $('#encryptionKey-password-div').show();
 }
 
 $(document).ready(function() {
@@ -68,11 +129,13 @@ $(document).ready(function() {
                 var plaintextOriginalMessage = "";
 
                 var receivedEncryptedMessage = response.message;
-                var isPasswordEncrypted = false;
 
                 if (receivedEncryptedMessage.startsWith('[p]')) {
-                    receivedEncryptedMessage = receivedEncryptedMessage.substring(3);
-                    isPasswordEncrypted = true;
+                    $('#manually-password-decrypt').show();
+                    $('#encryptedMessage-password').val(receivedEncryptedMessage.substring(3));
+                    $('#encryptionKey-password').val(window.location.hash.substring(1));
+                    $('#retrieved').hide();
+                    return;
                 }
 
                 // remove this block when there are no more messages with format_version == 0
@@ -115,6 +178,20 @@ $(document).ready(function() {
         var decryptedMessage = await decryptMessage(encryptedMessage, encryptionKey);
         $('#message').val(decryptedMessage);
     });
+
+    $('#decrypt-password').click(async function() {
+        var encryptedMessage = $('#encryptedMessage-password').val();
+        var encryptionKey = $('#encryptionKey-password').val();
+        // in case the whole URL is pasted
+        if (encryptionKey.includes('#')) {
+            encryptionKey = encryptionKey.split('#')[1];
+        }
+        var password = $('#password').val();
+        $('#manually-password-decrypt').hide();
+        $('#retrieved').show();
+        var decryptedMessage = await decryptMessageWithPassword(encryptedMessage, encryptionKey, password);
+        $('#message').val(decryptedMessage);
+    });
 });
 </script>
 </head>
@@ -126,7 +203,7 @@ $(document).ready(function() {
 </div>
 <div id="retrieved" style="display: none; text-align: center;">
     <p>The message has been retrieved and <b>removed</b> from the server.</p>
-    <textarea id="message" name="message" rows="10" cols="40" oninput="updateLimitText()" readonly></textarea>
+    <textarea id="message" name="message" rows="10" cols="40" readonly></textarea>
     <br>
     <button id="copy">Copy all</button>
 </div>
@@ -134,7 +211,7 @@ $(document).ready(function() {
     <p>The message has not been found</p>
     <p>It may have been:</p>
     <ul>
-        <li>Seen before and thus destroyed</li>
+        <li>Requested by this link before and thus destroyed</li>
         <li>Expired</li>
         <li>Never existed by this link</li>
     </ul>
@@ -146,8 +223,21 @@ $(document).ready(function() {
     <p>Enter the <b>encryption key</b> from the original URL below to decrypt the received message:</p>
     <textarea id="encryptedMessage" name="encryptedMessage" rows="10" cols="40" readonly></textarea>
     <br>
-    <input id="encryptionKey" type="text" name="encryptionKey" placeholder="Encryption key" oninput="updateLimitText()">
+    <label for="encryptionKey">Encryption key or original link</label><br>
+    <input id="encryptionKey" type="text" name="encryptionKey" placeholder="Encryption key">
     <button id="decrypt">Decrypt</button>
+</div>
+<div id="manually-password-decrypt" style="display: none; text-align: center;">
+    <p>The message has been received and <b>removed</b> from the server.</p>
+    <p>The message is password-protected, please enter the password.</p>
+    <textarea id="encryptedMessage-password" name="encryptedMessage" rows="10" cols="40" readonly></textarea><br>
+    <div id="encryptionKey-password-div" style="display: none">
+        <label for="encryptionKey-password">Encryption key or original link</label><br>
+        <input id="encryptionKey-password" type="text" name="encryptionKey" placeholder="Encryption key" autocomplete="off"><br>
+    </div>
+    <label for="password">Password:</label><br>
+    <input id="password" type="password" name="encryptionKey" placeholder="Password" autocomplete="off">
+    <button id="decrypt-password">Decrypt</button>
 </div>
 <div id="footer" style="margin-top: 20px; text-align: center; font-size: 0.8em; color: #888;">
     <p>One Time Share - <a href="https://1ts.dev">1ts.dev</a> • <a href="https://telegra.ph/1tsdev-07-18">About</a> • <a href="https://github.com/gameraccoon/one-time-share">Source code</a></p>
