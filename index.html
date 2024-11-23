@@ -4,9 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>One Time Share</title>
-
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-
 <style>
 body {
     font-family: Arial, sans-serif;
@@ -27,6 +25,44 @@ textarea {
 var messageLimitBytes = {{.MessageLimitBytes}};
 var retentionLimitMinutes = {{.RetentionLimitMinutes}};
 var userToken = 'default';
+
+function generateEncryptionKey() {
+    var aesAlgorithmKeyGen = {
+        name: "AES-GCM",
+        length: 128
+    };
+
+    var promise = window.crypto.subtle.generateKey(aesAlgorithmKeyGen, true, ["encrypt", "decrypt"]);
+
+    return promise.then(function(key) {
+        return key;
+    });
+}
+
+async function encryptMessage(originalMessage, key) {
+    var encoder = new TextEncoder('utf-8');
+    var clearDataArrayBufferView = encoder.encode(originalMessage);
+
+    var iv = window.crypto.getRandomValues(new Uint8Array(12));
+
+    var aesAlgorithm = {
+        name: "AES-GCM",
+        iv: iv,
+    };
+
+    var encryptedMessage = await window.crypto.subtle.encrypt(aesAlgorithm, key, clearDataArrayBufferView);
+    var encryptedMessageWithIv = new Uint8Array(encryptedMessage.byteLength + iv.byteLength);
+    encryptedMessageWithIv.set(iv, 0);
+    encryptedMessageWithIv.set(new Uint8Array(encryptedMessage), iv.byteLength);
+
+    return window.btoa(String.fromCharCode.apply(null, new Uint8Array(encryptedMessageWithIv)));
+}
+
+function keyToPlainText(key) {
+    return window.crypto.subtle.exportKey("raw", key).then(function(keyData) {
+        return window.btoa(String.fromCharCode.apply(null, new Uint8Array(keyData)));
+    });
+}
 
 const retentionOptions = [
     { value: 60, text: '1 hour' },
@@ -107,7 +143,7 @@ function updateWithUserToken(token) {
 $(document).ready(function() {
     updatePageElementsFromLimits();
 
-    $('#generate').click(function() {
+    $('#generate').click(async function() {
         if ($('#message').val().length === 0) {
             alert('Please enter some text in Message.');
             return;
@@ -118,11 +154,13 @@ $(document).ready(function() {
             return;
         }
 
-        // convert to base64
-        message = btoa(unescape(encodeURIComponent($('#message').val())));
+        var regularEncryptionKey = await generateEncryptionKey();
+        var plainTextMessage = $('#message').val();
+        var encryptedMessage = await encryptMessage(plainTextMessage, regularEncryptionKey);
 
-        $.post('/save', { user_token: userToken, message_data: message, retention: $('#retention').val()}).done(function(data) {
-            $('#url').val(data)
+        $.post('/save', { user_token: userToken, message_data: encryptedMessage, retention: $('#retention').val()}).done(async function(data) {
+            var plaintextKey = await keyToPlainText(regularEncryptionKey);
+            $('#url').val(data + '#' + plaintextKey);
             $('#url-div').show();
             $('#generate').prop('disabled', true);
         })

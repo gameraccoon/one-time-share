@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const currentFormatVersion = 0
+const currentFormatVersion = 1
 
 var globalStaticData StaticData
 
@@ -177,10 +177,7 @@ func createNewMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// since we encode data in base64, the size of the message will be bigger
-	originalSize := calculateDecodedBase64Size(messageData)
-
-	if maxSizeBytes > 0 && originalSize > maxSizeBytes {
+	if maxSizeBytes > 0 && len(messageData) > calculateStoredMessageLimit(maxSizeBytes) {
 		http.Error(w, "Message is too big", http.StatusBadRequest)
 		return
 	}
@@ -423,15 +420,8 @@ func main() {
 	handleRequests()
 }
 
-func calculateDecodedBase64Size(data string) int {
-	separatorsCount := 0
-	for i := len(data) - 1; i >= 0; i-- {
-		if data[i] == '=' {
-			separatorsCount++
-		} else {
-			break
-		}
-	}
-
-	return len(data)*3/4 - separatorsCount
+func calculateStoredMessageLimit(plainTextSize int) int {
+	// we have 16 bytes of overhead for AES-GCM, 12 bytes for IV
+	// the data is base64 encoded, so we need to multiply by 4/3
+	return (16+12+plainTextSize)*4/3 + 2
 }
