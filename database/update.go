@@ -6,7 +6,7 @@ import (
 
 const (
 	minimalVersion = "0.1"
-	latestVersion  = "0.1"
+	latestVersion  = "0.2"
 )
 
 type dbUpdater struct {
@@ -58,11 +58,11 @@ func makeUpdaters(versionFrom string, versionTo string) (updaters []dbUpdater) {
 
 func makeAllUpdaters() []dbUpdater {
 	return []dbUpdater{
-		//{
-		//	version: "0.2",
-		//	updateDb: func(db *OneTimeShareDb) {
-		//		db.db.Exec("ALTER TABLE users ADD COLUMN current_session_idle_count INTEGER")
-		//	},
-		//},
+		{
+			version: "0.2",
+			updateDb: func(db *OneTimeShareDb) {
+				db.db.Exec("ALTER TABLE messages ADD COLUMN format_version INTEGER DEFAULT 0")
+			},
+		},
 	}
 }

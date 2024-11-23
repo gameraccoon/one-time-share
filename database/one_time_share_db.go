@@ -46,6 +46,7 @@ func ConnectDb(path string) (database *OneTimeShareDb, err error) {
 		" messages(id INTEGER NOT NULL PRIMARY KEY" +
 		",message_token TEXT NOT NULL UNIQUE" +
 		",expire_timestamp INTEGER NOT NULL" +
+		",format_version INTEGER NOT NULL" +
 		",data TEXT NOT NULL" +
 		")")
 
@@ -234,7 +235,7 @@ func (database *OneTimeShareDb) GetUserLastMessageCreationTime(token string) (ti
 	return
 }
 
-func (database *OneTimeShareDb) SaveMessage(messageToken string, expireTimestamp int64, data string) error {
+func (database *OneTimeShareDb) SaveMessage(messageToken string, expireTimestamp int64, data string, formatVersion uint32) error {
 	database.mutex.Lock()
 	defer database.mutex.Unlock()
 
@@ -264,15 +265,15 @@ func (database *OneTimeShareDb) SaveMessage(messageToken string, expireTimestamp
 		log.Fatal(err)
 	}
 
-	database.db.Exec(fmt.Sprintf("INSERT INTO messages (message_token, expire_timestamp, data) VALUES ('%s', %d, '%s')", sanitizedToken, expireTimestamp, dbBase.SanitizeString(data)))
+	database.db.Exec(fmt.Sprintf("INSERT INTO messages (message_token, expire_timestamp, data, format_version) VALUES ('%s', %d, '%s', %d)", sanitizedToken, expireTimestamp, dbBase.SanitizeString(data), formatVersion))
 	return nil
 }
 
-func (database *OneTimeShareDb) TryConsumeMessage(messageToken string) (data *string, expireTimestamp int64) {
+func (database *OneTimeShareDb) TryConsumeMessage(messageToken string) (data *string, expireTimestamp int64, formatVersion uint32) {
 	database.mutex.Lock()
 	defer database.mutex.Unlock()
 
-	rows, err := database.db.Query(fmt.Sprintf("SELECT id, data, expire_timestamp FROM messages WHERE message_token='%s'", dbBase.SanitizeString(messageToken)))
+	rows, err := database.db.Query(fmt.Sprintf("SELECT id, data, expire_timestamp, format_version FROM messages WHERE message_token='%s'", dbBase.SanitizeString(messageToken)))
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -286,12 +287,12 @@ func (database *OneTimeShareDb) TryConsumeMessage(messageToken string) (data *st
 
 	id := -1
 	if rows.Next() {
-		err := rows.Scan(&id, &data, &expireTimestamp)
+		err := rows.Scan(&id, &data, &expireTimestamp, &formatVersion)
 		if err != nil {
 			log.Fatal(err.Error())
 		}
 	} else {
-		return nil, 0
+		return nil, 0, 0
 	}
 
 	err = rows.Close()

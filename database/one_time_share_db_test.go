@@ -212,6 +212,8 @@ func TestSaveAndConsumeMessage(t *testing.T) {
 	}
 	defer db.Disconnect()
 
+	const formatVersion = 0
+
 	var message1 = "test message 1"
 	var message2 = "test message 2"
 	var message3 = "test message 3"
@@ -219,37 +221,37 @@ func TestSaveAndConsumeMessage(t *testing.T) {
 	var messageToken1 = "321"
 	var messageToken2 = "123"
 
-	err := db.SaveMessage(messageToken1, 100, message1)
+	err := db.SaveMessage(messageToken1, 100, message1, formatVersion)
 	assert.Nil(err)
-	err = db.SaveMessage(messageToken1, 200, message2)
+	err = db.SaveMessage(messageToken1, 200, message2, formatVersion)
 	assert.NotNil(err)
-	err = db.SaveMessage(messageToken2, 300, message3)
+	err = db.SaveMessage(messageToken2, 300, message3, formatVersion)
 	assert.Nil(err)
 
 	{
-		message, expireTimestamp := db.TryConsumeMessage(messageToken1)
+		message, expireTimestamp, _ := db.TryConsumeMessage(messageToken1)
 		assert.Equal(message1, *message)
 		assert.Equal(int64(100), expireTimestamp)
 	}
 
 	{
-		message, _ := db.TryConsumeMessage(messageToken1)
+		message, _, _ := db.TryConsumeMessage(messageToken1)
 		assert.Nil(message)
 	}
 
 	{
-		message, expireTimestamp := db.TryConsumeMessage(messageToken2)
+		message, expireTimestamp, _ := db.TryConsumeMessage(messageToken2)
 		assert.Equal(message3, *message)
 		assert.Equal(int64(300), expireTimestamp)
 	}
 
 	{
-		message, _ := db.TryConsumeMessage(messageToken2)
+		message, _, _ := db.TryConsumeMessage(messageToken2)
 		assert.Nil(message)
 	}
 
 	{
-		message, _ := db.TryConsumeMessage("not existing token")
+		message, _, _ := db.TryConsumeMessage("not existing token")
 		assert.Nil(message)
 	}
 }
@@ -264,26 +266,28 @@ func TestClearExpiredMessages(t *testing.T) {
 	}
 	defer db.Disconnect()
 
+	const formatVersion = 0
+
 	var message1 = "test message 1"
 	var message2 = "test message 2"
 
 	var messageToken1 = "321"
 	var messageToken2 = "123"
 
-	err := db.SaveMessage(messageToken1, 100, message1)
+	err := db.SaveMessage(messageToken1, 100, message1, formatVersion)
 	assert.Nil(err)
-	err = db.SaveMessage(messageToken2, 200, message2)
+	err = db.SaveMessage(messageToken2, 200, message2, formatVersion)
 	assert.Nil(err)
 
 	db.ClearExpiredMessages(160)
 
 	{
-		message, _ := db.TryConsumeMessage(messageToken1)
+		message, _, _ := db.TryConsumeMessage(messageToken1)
 		assert.Nil(message)
 	}
 
 	{
-		message, expireTimestamp := db.TryConsumeMessage(messageToken2)
+		message, expireTimestamp, _ := db.TryConsumeMessage(messageToken2)
 		assert.Equal(message2, *message)
 		assert.Equal(int64(200), expireTimestamp)
 	}
@@ -340,4 +344,40 @@ func TestSettingLimitsDoesNotChangeLastMessageCreationTime(t *testing.T) {
 	db.SetUserLimits(token, 1, 2, 3)
 
 	assert.Equal(int64(100), db.GetUserLastMessageCreationTime(token))
+}
+
+func TestSaveMessageWithVersionConsumedMessageRetainVersion(t *testing.T) {
+	assert := require.New(t)
+	db := createDbAndConnect(t)
+	defer clearDb()
+	if db == nil {
+		t.Fail()
+		return
+	}
+	defer db.Disconnect()
+
+	const oldFormatVersion = uint32(0)
+	const newFormatVersion = uint32(1)
+
+	var message1 = "test message"
+	var messageToken1 = "123"
+	var message2 = "test message 2"
+	var messageToken2 = "321"
+
+	err := db.SaveMessage(messageToken1, 100, message1, oldFormatVersion)
+	assert.Nil(err)
+	err = db.SaveMessage(messageToken2, 200, message2, newFormatVersion)
+	assert.Nil(err)
+
+	{
+		message, _, formatVersion := db.TryConsumeMessage(messageToken1)
+		assert.Equal(message1, *message)
+		assert.Equal(oldFormatVersion, formatVersion)
+	}
+
+	{
+		message, _, formatVersion := db.TryConsumeMessage(messageToken2)
+		assert.Equal(message2, *message)
+		assert.Equal(newFormatVersion, formatVersion)
+	}
 }

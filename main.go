@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+const currentFormatVersion = 0
+
 var globalStaticData StaticData
 
 type StaticData struct {
@@ -212,7 +214,7 @@ func createNewMessage(w http.ResponseWriter, r *http.Request) {
 		expireTimestamp = time.Now().Add(time.Duration(requestedRetentionLimitMinutes) * time.Minute).Unix()
 	}
 
-	err = globalStaticData.database.SaveMessage(messageToken, expireTimestamp, messageData)
+	err = globalStaticData.database.SaveMessage(messageToken, expireTimestamp, messageData, currentFormatVersion)
 	if err != nil {
 		log.Println("Error while saving message: ", err)
 		http.Error(w, "Can't save message. Try again", http.StatusInternalServerError)
@@ -272,7 +274,7 @@ func tryConsumeExistingMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	message, expireTimestamp := globalStaticData.database.TryConsumeMessage(messageToken)
+	message, expireTimestamp, formatVersion := globalStaticData.database.TryConsumeMessage(messageToken)
 
 	// we don't distinguish between not found and expired messages since this wouldn't be reliable
 	if message != nil && (expireTimestamp != 0 && time.Now().Unix() < expireTimestamp) {
@@ -289,7 +291,15 @@ func tryConsumeExistingMessage(w http.ResponseWriter, r *http.Request) {
 				sanitizedMessage += string(char)
 			}
 		}
-		_, err = fmt.Fprintf(w, `{"status": "ok", "message": "%s"}`, sanitizedMessage)
+
+		// we use this block only during short periods when we may have messages
+		// with previous format versions still in flight
+		versionBlock := ""
+		if formatVersion != currentFormatVersion {
+			versionBlock = fmt.Sprintf(`, "format_version": %d`, formatVersion)
+		}
+
+		_, err = fmt.Fprintf(w, `{"status": "ok", "message": "%s"%s}`, sanitizedMessage, versionBlock)
 		if err != nil {
 			log.Println("Error while writing response: ", err)
 			return
