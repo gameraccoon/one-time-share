@@ -44,7 +44,17 @@ function decryptMessage(encryptedMessage, key) {
         return window.crypto.subtle.decrypt(aesAlgorithm, importedKey, encryptedData).then(function(decryptedData) {
             return new TextDecoder('utf-8').decode(decryptedData);
         });
+    }).catch(function(error) {
+        onGenericEncryptionFailed(error, encryptedMessage);
+        alert('Failed to decrypt message, check the encryption key');
+        return "error";
     });
+}
+
+function onGenericEncryptionFailed(error, encryptedMessage) {
+    $('#retrieved').hide();
+    $('#manually-decrypt-after-error').show();
+    $('#encryptedMessage').val(encryptedMessage);
 }
 
 $(document).ready(function() {
@@ -93,7 +103,7 @@ $(document).ready(function() {
         document.execCommand('copy');
     });
 
-    $('#decrypt').click(function() {
+    $('#decrypt').click(async function() {
         var encryptedMessage = $('#encryptedMessage').val();
         var encryptionKey = $('#encryptionKey').val();
         // in case the whole URL is pasted
@@ -102,7 +112,7 @@ $(document).ready(function() {
         }
         $('#manually-decrypt-after-error').hide();
         $('#retrieved').show();
-        var decryptedMessage = decryptMessage(encryptedMessage, encryptionKey);
+        var decryptedMessage = await decryptMessage(encryptedMessage, encryptionKey);
         $('#message').val(decryptedMessage);
     });
 });
