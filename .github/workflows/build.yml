@@ -34,7 +34,7 @@ jobs:
         cp -r one-time-share app-config.json index.html shared.html tools artifacts
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: one-time-share_ubuntu-x64
         path: artifacts/*
